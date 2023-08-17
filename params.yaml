@@ -1,0 +1,25 @@
+# Using free-form deformation model
+model:
+  name: SVFFD
+  transpose: False
+  stride: &stride [8, 8, 8]
+# Loss terms of objective function to minimize
+energy:
+  seg: [1, DMMR] # or NMI, MSE, LNCC, ...
+  reg: [0.001, L2Norm]
+  be: [0.0005, BSplineBending, stride: *stride]
+#  curv: [0.0001, Curvature]
+#  diffusion: [0.01, Diffusion]
+#  tv: [0.01, TV]
+# Optimization scheme and parameters
+optim:
+  name: Adam
+  step_size: 0.01
+  min_delta: -0.000001
+  max_steps: 200
+# Gaussian resolution pyramid
+pyramid:
+  dims: ["x", "y", "z"]
+  levels: 3
+  spacing: [1., 1., 1.]
+modality: T1T2

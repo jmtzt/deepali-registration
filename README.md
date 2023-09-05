@@ -1,6 +1,6 @@
 # Free-form deformation algorithm
 
-Traditional pairwise registration using free-form deformation model using the Deepali framework.
+Traditional pairwise registration using free-form deformation model using the [Deepali](https://github.com/BioMedIA/deepali/) framework.
 
 ## Installation
 1. Clone this repository

@@ -1,6 +1,13 @@
 # Free-form deformation algorithm
 
-Traditional pairwise registration using free-form deformation model.
+Traditional pairwise registration using free-form deformation model using the Deepali framework.
+
+## Installation
+1. Clone this repository
+2. In a fresh Python 3.7+ virtual environment, install dependencies by running:
+    ```
+    pip install -r <path_to_cloned_repository>/requirements.txt
+    ```
 
 ## Usage
 

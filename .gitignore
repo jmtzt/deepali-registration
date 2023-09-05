@@ -1,6 +1,7 @@
 __init__.py
 __main__.py
 .idea
+outputs/
 imgs/
 dmmr_models/
 __pycache__/

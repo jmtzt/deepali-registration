@@ -111,7 +111,10 @@ def measure_seg_metrics(metric_data):
     """ Calculate segmentation """
     seg_gt = metric_data['target_seg']
     seg_pred = metric_data['warped_source_seg']
+    seg_gt = seg_gt[np.newaxis, ...]
+    seg_pred = seg_pred[np.newaxis, ...]
     assert seg_gt.ndim == seg_pred.ndim
+    assert seg_gt.ndim in (4, 5)  # (N, 1, *2D sizes) or (N, 1, *3D sizes)
 
     results = dict()
     for label_cls in np.unique(seg_gt):

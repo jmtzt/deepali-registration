@@ -388,7 +388,7 @@ class DMMRLoss(PairwiseImageLoss):
         for i, patch in enumerate(fixed_patches):
             patch = patch[0].squeeze()
             zero_percentage = torch.mean((patch.squeeze() == 0).float()).item()
-            if zero_percentage > 0.0:
+            if zero_percentage > 0.2:
                 keep_mask[i] = 0
             else:
                 keep_mask[i] = 1

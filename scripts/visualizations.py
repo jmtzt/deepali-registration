@@ -199,7 +199,8 @@ def top_n_hparams(data, target_metric, n=5, high=True):
 
 
 if __name__== '__main__':
-    data = pd.read_csv('imgs/grid_search_results.csv')
+    # data = pd.read_csv('imgs/grid_search_results.csv')
+    data = pd.read_csv('imgs/refined_grid_search_results.csv')
     # for target_metric, high in {'after_reg_mean_dice': True, 'after_reg_dice_class_1': True,
     #                             'after_reg_dice_class_2': True, 'after_reg_dice_class_3': True,
     #                             'after_reg_dice_class_4': True, 'after_reg_dice_class_5': True,
@@ -209,6 +210,7 @@ if __name__== '__main__':
     #     print(f"Top 5 hyperparameters for {target_metric}")
     #     print(120*'-')
     #     print(top_n_hparams(data, target_metric, n=5, high=high))
+
     plot_subclasses_dice(data)
     plot_mean_dice(data)
     plot_mean_rmse(data)

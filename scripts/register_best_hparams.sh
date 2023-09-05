@@ -1,40 +1,67 @@
 #!/bin/bash
 
-base_path = '/home/joao/repos/ffd/'
+base_path='/home/joao/repos/ffd/'
 yaml_file="/home/joao/repos/ffd/params.yaml"
 dmmr_models_dir='/home/joao/repos/dmmr/outputs/dmmr_models'
 tanh_model_path="${dmmr_models_dir}/camcan_t1t2_dmmr_net_tanh_hinge_lr0.0001_epochs54_online_aug_tuned_tfms_single_axis_small_rot.pt"
 sigmoid_model_path="${dmmr_models_dir}/camcan_t1t2_dmmr_net_sigmoid_bce_lr0.0001_epochs59_online_aug_tuned_tfms_single_axis_small_rot_bound.pt"
-output_file="/home/joao/repos/ffd/imgs/grid_search_results.csv"
+tanh_ps34_model_path="${dmmr_models_dir}/camcan_t1t2_dmmr_net_tanh_hinge_ps34.pt"
+sigmoid_ps34_model_path="${dmmr_models_dir}/camcan_t1t2_dmmr_net_sigmoid_bce_ps34.pt"
+multiclass_5pos_5neg_path="${dmmr_models_dir}/camcan_t1t2_dmmr_net_sigmoid_multiclass_ce_5pos_5neg.pt"
+multiclass_1pos_4neg_path="${dmmr_models_dir}/camcan_t1t2_dmmr_net_sigmoid_multiclass_ce_1pos_4neg.pt"
+multiclass_1pos_4neg_ps34_path="${dmmr_models_dir}/camcan_t1t2_dmmr_net_sigmoid_multiclass_ce_1pos_4neg_ps34.pt"
+multiclass_1pos_1neg_path="${dmmr_models_dir}/camcan_t1t2_dmmr_net_sigmoid_multiclass_ce_1pos_1neg.pt"
+multiclass_1pos_1neg_ps34_path="${dmmr_models_dir}/camcan_t1t2_dmmr_net_sigmoid_multiclass_ce_1pos_1neg_ps34.pt"
+output_file="/home/joao/repos/ffd/outputs/csv/best_hparams_registration_results.csv"
 
-# List of values to iterate over for the "reg" parameter
-loss_values=("MSE" "NMI" "LNCC" "DMMR_TANH" "DMMR_SIGMOID")
-reg_values=("0" "0.1" "0.01" "0.001" "0.0001" "0.00001" "0.000001" "0.0000001" "0.00000001" "0.000000001" "0.0000000001")
-lr_values=("0.1" "0.01" "0.001" "0.0001")
-be_values=("0" "0.1" "0.5" "0.01" "0.05" "0.001" "0.005" "0.0001" "0.0005" "0.00001" "0.00005")
+# Hyperparameter values for each loss function
+declare -A lr_values
+declare -A be_values
+declare -A reg_values
+
+lr_values=( ["MSE"]="0.2" ["NMI"]="0.001" ["LNCC"]="0.005" ["DMMR_TANH"]="0.05" ["DMMR_SIGMOID"]="0.005" ["DMMR_SIGMOID_PS34"]="0.005" ["DMMR_TANH_PS34"]="0.05" ["DMMR_MULTICLASS_5POS_5NEG"]="0.005" ["DMMR_MULTICLASS_1POS_4NEG"]="0.005" ["DMMR_MULTICLASS_1POS_4NEG_PS34"]="0.005" ["DMMR_MULTICLASS_1POS_1NEG"]="0.005" ["DMMR_MULTICLASS_1POS_1NEG_PS34"]="0.005")
+be_values=( ["MSE"]="0.001" ["NMI"]="0.005" ["LNCC"]="0.001" ["DMMR_TANH"]="0.1" ["DMMR_SIGMOID"]="0.001" ["DMMR_SIGMOID_PS34"]="0.001" ["DMMR_TANH_PS34"]="0.1" ["DMMR_MULTICLASS_5POS_5NEG"]="0.001" ["DMMR_MULTICLASS_1POS_4NEG"]="0.001" ["DMMR_MULTICLASS_1POS_4NEG_PS34"]="0.001" ["DMMR_MULTICLASS_1POS_1NEG"]="0.001" ["DMMR_MULTICLASS_1POS_1NEG_PS34"]="0.001")
+reg_values=( ["MSE"]="0.02" ["NMI"]="0.00005" ["LNCC"]="0.00002" ["DMMR_TANH"]="0.00005" ["DMMR_SIGMOID"]="0.0005" ["DMMR_SIGMOID_PS34"]="0.0005" ["DMMR_TANH_PS34"]="0.00005" ["DMMR_MULTICLASS_5POS_5NEG"]="0.0005" ["DMMR_MULTICLASS_1POS_4NEG"]="0.0005" ["DMMR_MULTICLASS_1POS_4NEG_PS34"]="0.0005" ["DMMR_MULTICLASS_1POS_1NEG"]="0.0005" ["DMMR_MULTICLASS_1POS_1NEG_PS34"]="0.0005")
 
 echo "loss,model_path,lr,be,reg,before_reg_dice_class_1,before_reg_dice_class_2,before_reg_dice_class_3,before_reg_dice_class_4,before_reg_dice_class_5,before_reg_mean_dice,before_reg_rmse,after_reg_dice_class_1,after_reg_dice_class_2,after_reg_dice_class_3,after_reg_dice_class_4,after_reg_dice_class_5,after_reg_folding_ratio,after_reg_mag_det_jac_det,after_reg_mean_dice,after_reg_rmse" > "$output_file"
 
-for loss_value in "${loss_values[@]}"; do
+# Iterate over the loss functions
+for loss_value in "${!lr_values[@]}"; do
     if [[ $loss_value == "DMMR_TANH" ]]; then
         model_path="$tanh_model_path"
     elif [[ $loss_value == "DMMR_SIGMOID" ]]; then
         model_path="$sigmoid_model_path"
+    elif [[ $loss_value == "DMMR_TANH_PS34" ]]; then
+        model_path="$tanh_ps34_model_path"
+    elif [[ $loss_value == "DMMR_SIGMOID_PS34" ]]; then
+        model_path="$sigmoid_ps34_model_path"
+    elif [[ $loss_value == "DMMR_MULTICLASS_5POS_5NEG" ]]; then
+        model_path="$multiclass_5pos_5neg_path"
+    elif [[ $loss_value == "DMMR_MULTICLASS_1POS_4NEG" ]]; then
+        model_path="$multiclass_1pos_4neg_path"
+    elif [[ $loss_value == "DMMR_MULTICLASS_1POS_4NEG_PS34" ]]; then
+        model_path="$multiclass_1pos_4neg_ps34_path"
+    elif [[ $loss_value == "DMMR_MULTICLASS_1POS_1NEG" ]]; then
+        model_path="$multiclass_1pos_1neg_path"
+    elif [[ $loss_value == "DMMR_MULTICLASS_1POS_1NEG_PS34" ]]; then
+        model_path="$multiclass_1pos_1neg_ps34_path"
     else
         model_path=""
     fi
-    yaml_loss_value=$(echo "$loss_value" | sed 's/_TANH\|_SIGMOID//g')
+    yaml_loss_value="${loss_value/DMMR_*/DMMR}"
+#    yaml_loss_value=$(echo "$loss_value" | sed 's/_TANH\|_SIGMOID//g')
 
-    for lr_value in "${lr_values[@]}"; do
-        for be_value in "${be_values[@]}"; do
-            for reg_value in "${reg_values[@]}"; do
+    # Iterate over the suggested hyperparameter values for the current loss function
+    for lr_value in ${lr_values[$loss_value]}; do
+        for be_value in ${be_values[$loss_value]}; do
+            for reg_value in ${reg_values[$loss_value]}; do
                 echo "------------------------------------------------------------------------------------"
                 echo "Running with loss=${loss_value}, lr=${lr_value}, be=${be_value}, reg=${reg_value}..."
-
+#
                 sed -i "s/\(seg:\s*\[.*\]\)/seg: [1, ${yaml_loss_value}]/" "$yaml_file"
                 sed -i "s/\(reg:\s*\[.*L2Norm\]\)/reg: [${reg_value}, L2Norm]/" "$yaml_file"
                 sed -i "s/\(step_size:\s*\).*$/step_size: ${lr_value}/" "$yaml_file"
-                sed -i "s/\(be:\s*\[.*BSplineBending, stride: \[.*\]\]\)/be: [${be_value}, BSplineBending, stride: [*stride]]/" "$yaml_file"
+                sed -i "s/\(be:\s*\[\).*\(, BSplineBending, stride: \[.*\]\]\)/\1${be_value}\2/" "$yaml_file"
 
                 script_output=$(python $base_path/register.py --dmmr_model_path "$model_path")
 
@@ -62,6 +89,7 @@ for loss_value in "${loss_values[@]}"; do
 
                 # Append the values to the CSV file
                 echo "${loss_value},${model_path},${lr_value},${be_value},${reg_value},${before_reg_dice_class_1},${before_reg_dice_class_2},${before_reg_dice_class_3},${before_reg_dice_class_4},${before_reg_dice_class_5},${before_reg_mean_dice},${before_reg_rmse},${after_reg_dice_class_1},${after_reg_dice_class_2},${after_reg_dice_class_3},${after_reg_dice_class_4},${after_reg_dice_class_5},${after_reg_folding_ratio},${after_reg_mag_det_jac_det},${after_reg_mean_dice},${after_reg_rmse}" >> "$output_file"
+
             done
         done
     done

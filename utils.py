@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import copy
 import SimpleITK as sitk
 import matplotlib.pyplot as plt
 
@@ -36,8 +37,8 @@ def show_image(
     im = ax.imshow(image.reshape((-1,) + image.shape[-2:])[0].cpu().numpy(), **kwargs)
     if label:
         ax.set_title(label, fontsize=12, y=1.04)
-    ax.get_xaxis().set_visible(False)
-    ax.get_yaxis().set_visible(False)
+    # ax.get_xaxis().set_visible(False)
+    # ax.get_yaxis().set_visible(False)
 
     return im
 
@@ -51,10 +52,14 @@ def difference_image(image1, image2):
                                                                                         image2.GetSize()) or not np.array_equal(
         image1.GetSpacing(), image2.GetSpacing()):
         image2 = resample(image2, downsample=0, reference=image1, interp='linear')
+    image1 = Image.from_sitk(image1)
+    image2 = Image.from_sitk(image2)
+    #
+    # diff_image = sitk.Subtract(image1, image2)
+    #
+    # diff_image = Image.from_sitk(diff_image)
 
-    diff_image = sitk.Subtract(image1, image2)
-
-    diff_image = Image.from_sitk(diff_image)
+    diff_image = torch.abs(image1.data - image2.data)
 
     return diff_image
 
@@ -154,22 +159,23 @@ def plot_images_and_diffs(target_img, source_img, warped_img, diff_start,
                           diff_end, metrics_before, metrics_after, dice_dict, suptitle, outfile, args):
     # Plot the images and difference maps
     fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(15, 10))
+    channel = target_img.shape[1] // 2
 
-    show_image(target_img[0, target_img.shape[1] // 2],
+    show_image(target_img[0, channel],
                f"fixed \n{str(args.target_img.parent).split('/')[-1]}",
                ax=axes[0, 0])
-    show_image(source_img[0, source_img.shape[1] // 2],
+    show_image(source_img[0, channel],
                f"moving \n{str(args.source_img.parent).split('/')[-1]}",
                ax=axes[0, 1])
-    show_image(warped_img.detach()[0, warped_img.shape[1] // 2], "warped", ax=axes[0, 2])
+    show_image(warped_img.detach()[0, channel], "warped", ax=axes[0, 2])
 
-    err_before = show_image(diff_start[0, diff_start.shape[1] // 2],
+    err_before = show_image(diff_start[0, channel],
                             f"diff start \n"
                             f"mean dice {metrics_before['mean_dice']:.3f}\nrmse {metrics_before['rmse']:.3f}",
                             ax=axes[1, 0])
     cbar_err_before = plt.colorbar(err_before, ax=axes[1, 0])
 
-    err_after = show_image(diff_end[0, diff_end.shape[1] // 2],
+    err_after = show_image(diff_end[0, channel],
                            f"diff end \n"
                            f"mean dice {metrics_after['mean_dice']:.3f}\nrmse {metrics_after['rmse']:.3f}",
                            ax=axes[1, 1])
@@ -248,3 +254,65 @@ def invertible_registration_figure(
     plt.show()
 
     return fig
+
+
+def plot_t1t1_diff(target, source, transform, outfile):
+    device = transform.device
+
+    highres_grid = transform.grid()
+    grid_image = U.grid_image(highres_grid, num=1, stride=4, inverted=True, device=device)
+
+    with torch.inference_mode():
+
+        source_transformer = spatial.ImageTransformer(transform)
+
+        source_grid_transformer = spatial.ImageTransformer(transform, highres_grid, padding="zeros")
+
+        warped_source: Tensor = source_transformer(source.to(device))
+
+        warped_source_grid: Tensor = source_grid_transformer(grid_image)
+
+        # target_norm = U.normalize_image(data=target.data, min=0, max=1)
+        # warped_source_norm = U.normalize_image(data=warped_source, min=0, max=1)
+        # warped_source_norm_img = copy.deepcopy(target_norm)
+        # warped_source_norm_img.data = warped_source_norm
+        # diff = difference_image(target_norm, warped_source_norm_img)
+        warped_source_img = copy.deepcopy(target)
+        warped_source_img.data = warped_source
+        diff = difference_image(target, warped_source_img)
+
+    fig, axes = plt.subplots(1, 5, figsize=(12, 8), tight_layout=True)
+
+    ch = target.shape[1] // 2
+    show_image(target[0, ch], "target", ax=axes[0])
+    show_image(source[0, ch], "t1-source", ax=axes[1])
+    show_image(warped_source[0, ch], "warped t1-source", ax=axes[2])
+    show_image(warped_source_grid[0, 0, ch], "deformation", ax=axes[3])
+    dff_img = show_image(diff[0, ch], label="difference", ax=axes[4])
+    plt.colorbar(dff_img, ax=axes[4], shrink=0.3)
+
+    # plt.suptitle(title)
+    plt.savefig(outfile)
+    plt.show()
+
+
+def plot_seg_diff(target_seg, source_seg, warped_source_seg, outfile):
+    diff_og = torch.abs(target_seg - source_seg)
+    diff_after = torch.abs(target_seg - warped_source_seg)
+    diff_tt = torch.abs(target_seg - target_seg)
+
+    fig, axes = plt.subplots(2, 3, figsize=(12, 8), tight_layout=True)
+
+    show_image(target_seg[0, target_seg.shape[1] // 2], label='target_seg', ax=axes[0,0])
+    show_image(source_seg[0, source_seg.shape[1] // 2], label='source_seg', ax=axes[0,1])
+    show_image(warped_source_seg[0, warped_source_seg.shape[1] // 2], label='warped_source_seg', ax=axes[0,2])
+    diff_targ_targ = show_image(diff_tt[0, diff_tt.shape[1] // 2], label='diff target-target', ax=axes[1,0])
+    plt.colorbar(diff_targ_targ, ax=axes[1,0], shrink=0.5)
+    diff_og_img = show_image(diff_og[0, diff_og.shape[1] // 2], label='diff target-source', ax=axes[1,1])
+    plt.colorbar(diff_og_img, ax=axes[1,1], shrink=0.5)
+    diff_after_img = show_image(diff_after[0, diff_after.shape[1] // 2], label='diff target-warped-source', ax=axes[1,2])
+    plt.colorbar(diff_after_img, ax=axes[1,2], shrink=0.5)
+
+    plt.savefig(outfile)
+
+    plt.show()

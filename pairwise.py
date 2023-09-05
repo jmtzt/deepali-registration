@@ -38,6 +38,8 @@ def register_pairwise(
     verbose: Union[bool, int] = False,
     debug: Union[bool, int] = False,
     device: Optional[Device] = None,
+    hash: Optional[str] = None,
+    image_outdir: Optional[PathStr] = None,
 ) -> SpatialTransform:
     r"""Register pair of images using ``torch.autograd`` and ``torch.optim``."""
     # Configuration
@@ -210,6 +212,10 @@ def register_pairwise(
             result = loss.eval()
             if verbose > 3:
                 print(f"Evaluated final loss in {timer() - start:.3f}s")
+                outfile = image_outdir / f"{hash}_level_{level}_steps_{engine.num_steps}_loss_curve.png"
+                # engine.plot_loss(outfile=outfile)
+                engine.dump_loss_values(outfile=image_outdir / f"{hash}_level_{level}_steps_{engine.num_steps}_"
+                                                               f"loss_values.pkl")
             if verbose > 0:
                 loss_value = float(result["loss"])
                 print(

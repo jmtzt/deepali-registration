@@ -5,9 +5,11 @@ r"""Engine for iterative optimization-based registration."""
 from __future__ import annotations
 
 import math
+import pickle
 from collections import OrderedDict
 from timeit import default_timer as timer
 from typing import Callable
+import matplotlib.pyplot as plt
 
 import torch
 from torch import Tensor
@@ -31,7 +33,7 @@ class RegistrationEngine(object):
         max_steps: int = 500,
         min_delta: float = 1e-6,
         min_value: float = float("nan"),
-        max_history: int = 10,
+        max_history: int = 1000,
     ):
         r"""Initialize registration loop."""
         self.loss = loss
@@ -165,3 +167,19 @@ class RegistrationEngine(object):
         handle = RemovableHandle(self._step_hooks)
         self._step_hooks[handle.id] = hook
         return handle
+
+    def plot_loss(self, outfile):
+        plt.figure(figsize=(10, 6))
+        plt.plot(range(len(self.loss_values)), self.loss_values, marker='o')
+        plt.title('Loss Values Over Steps')
+        plt.xlabel('Steps')
+        plt.ylabel('Loss Value')
+        plt.grid(True)
+        plt.savefig(outfile)
+        plt.show()
+
+    def dump_loss_values(self, outfile):
+        with open(outfile, 'wb') as f:
+            pickle.dump(self.loss_values, f)
+
+

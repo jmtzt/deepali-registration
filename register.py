@@ -1,5 +1,4 @@
 r"""Example implementation of free-form deformation (FFD) algorithm."""
-
 import logging
 import os
 from pathlib import Path
@@ -12,6 +11,7 @@ import matplotlib.pyplot as plt
 import hashlib
 from timeit import default_timer as timer
 from typing import Any, Dict
+from datetime import datetime
 
 import json
 import yaml
@@ -30,7 +30,8 @@ from deepali.modules import TransformImage
 
 from pairwise import register_pairwise
 from metric import prepare_and_measure_metrics
-from utils import difference_image, show_image, plot_images_and_diffs, invertible_registration_figure
+from utils import difference_image, show_image, plot_images_and_diffs, invertible_registration_figure, plot_t1t1_diff, \
+    plot_seg_diff
 
 log = logging.getLogger()
 
@@ -41,6 +42,15 @@ def parser(**kwargs) -> ArgumentParser:
     r"""Construct argument parser."""
     if "description" not in kwargs:
         kwargs["description"] = globals()["__doc__"]
+
+    current_date = datetime.now().strftime("%d%m%y")
+    default_output_dir = Path(__file__).parent / f'outputs/registration/{current_date}'
+    default_output_dir.mkdir(parents=True, exist_ok=True)
+    # Create an out_hashes.txt file to store the hashes of the output files
+    if not os.path.exists(default_output_dir / 'out_hashes.txt'):
+        with open(default_output_dir / 'out_hashes.txt', 'w') as f:
+            f.write('')
+
     parser = ArgumentParser(**kwargs)
     parser.add_argument(
         "-c", "--config", help="Configuration file", default=Path(__file__).parent / "params.yaml"
@@ -63,7 +73,7 @@ def parser(**kwargs) -> ArgumentParser:
         "--output-transform",
         dest="output_transform",
         help="Output transformation parameters",
-        default=Path(__file__).parent / 'imgs/out/output/transform.mha',
+        default=default_output_dir / 'transform.mha',
     )
     parser.add_argument(
         "-w",
@@ -72,14 +82,14 @@ def parser(**kwargs) -> ArgumentParser:
         "--output-img",
         dest="warped_img",
         help="Deformed source image",
-        default=Path(__file__).parent / 'imgs/out/output/warped.mha',
+        default=default_output_dir / 'warped.mha',
     )
     parser.add_argument(
         "--warped-seg",
         "--output-seg",
         dest="warped_seg",
         help="Deformed source segmentation label image",
-        default=Path(__file__).parent / 'imgs/out/output/warped_seg.mha',
+        default=default_output_dir / 'warped_seg.mha',
     )
     parser.add_argument(
         "--device",
@@ -88,7 +98,7 @@ def parser(**kwargs) -> ArgumentParser:
         default="cuda",
     )
     parser.add_argument("--debug-dir", help="Output directory for intermediate files",
-                        default=Path(__file__).parent / 'imgs/out/debug')
+                        default=Path(__file__).parent / 'outputs/debug')
     parser.add_argument(
         "--debug",
         "--debug-level",
@@ -110,6 +120,8 @@ def parser(**kwargs) -> ArgumentParser:
         # default="/home/joao/repos/dmmr/outputs/dmmr_models/camcan_t1t2_dmmr_net_sigmoid_bce_lr0.0001_epochs59_online_aug_tuned_tfms_single_axis_small_rot_bound.pt"
         default="/home/joao/repos/dmmr/outputs/dmmr_models/camcan_t1t2_dmmr_net_tanh_hinge_lr0.0001_epochs54_online_aug_tuned_tfms_single_axis_small_rot.pt"
     )
+    parser.add_argument("--outdir", help="Output directory for files",
+                        default=default_output_dir)
 
     return parser
 
@@ -135,7 +147,8 @@ def func(args: Args) -> int:
     process_config_dmmr(config, args)
     config_str = json.dumps(config, sort_keys=True)
     config_hash = hashlib.md5(config_str.encode()).hexdigest()
-    with open('imgs/out_hashes.txt', 'a') as f:
+    outdir = Path(args.outdir)
+    with open(outdir / 'out_hashes.txt', 'a') as f:
         f.write(f'{config_hash}\n')
     device = torch.device("cuda:0" if args.device == "cuda" else "cpu")
     start = timer()
@@ -147,6 +160,8 @@ def func(args: Args) -> int:
         device=args.device,
         verbose=args.verbose,
         debug=args.debug,
+        image_outdir=args.outdir,
+        hash=config_hash,
     )
     log.info(f"Elapsed time: {timer() - start:.3f}s")
     if args.warped_img:
@@ -206,7 +221,7 @@ def func(args: Args) -> int:
         metric_data_raw = {
             'target': target_image,
             'source': source_image,
-            'target_seg': target_image_seg,
+            'target_seg': target_image_seg.int(),
             'source_seg': source_image_seg.int(),
             'target_pred': source_image,
             'warped_source_seg': source_image_seg.int(),
@@ -217,6 +232,7 @@ def func(args: Args) -> int:
 
         # Measure before registration metrics
         before_metrics_results = prepare_and_measure_metrics(metric_data_raw, metric_groups)
+        before_metrics_results = {key: float(value) for key, value in before_metrics_results.items()}
         print(60 * '-')
         print('Before registration metrics:')
         pprint(before_metrics_results)
@@ -227,9 +243,17 @@ def func(args: Args) -> int:
         # Measure after registration metrics
         metrics_results = prepare_and_measure_metrics(metric_data_raw, metric_groups,
                                                       transform, warped_image, warped_image_seg)
+        metrics_results = {key: float(value) for key, value in metrics_results.items()}
         print(60 * '-')
         print('After registration metrics:')
         pprint(metrics_results)
+
+        # save before metrics results and after registration metrics to a json file
+        filename, file_extension = str(args.warped_img).split('.')
+        output_filename = f"{filename}_{config_hash}_metrics.json"
+        with open(output_filename, 'w') as f:
+            json.dump({'before_registration': before_metrics_results,
+                       'after_registration': metrics_results}, f)
 
         if args.show:
             diff_image_start = difference_image(target_image, source_image)
@@ -268,6 +292,13 @@ def func(args: Args) -> int:
                                   args=args)
             outfile_deformation = f"{filename}_vis_deformation_{config_hash}.png"
             _ = invertible_registration_figure(target_image, source_image, transform, outfile_deformation)
+            t1_source_image = Image.read(str(args.source_img).replace('T2', 'T1'), device=device)
+            outfile_t1t1_diff = f"{filename}_t1t1_diff_{config_hash}.png"
+            plot_t1t1_diff(target_image, t1_source_image, transform, outfile=outfile_t1t1_diff)
+            outfile_seg_diff = f"{filename}_seg_diff_{config_hash}.png"
+            plot_seg_diff(target_seg=target_image_seg.int(), source_seg=source_image_seg.int(),
+                          warped_source_seg=warped_image_seg.int(), outfile=outfile_seg_diff)
+            # plot_t2t2_diff()
 
     return 0
 
